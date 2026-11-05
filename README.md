@@ -14,7 +14,8 @@ Independent VST3 edition for stereo tracks; Apple Silicon release target.
 | Dry / Wet | 0–100%, original mix law | 100% |
 
 Drag a knob or type its value. Double-click resets that control. Reset to Default
-resets all three controls with host automation gestures. All controls support host
+resets the three knobs and the Match/A/B switches with host automation gestures.
+Reset Match clears only the learned gain. All controls support host
 automation and session recall. Stereo float and double processing are supported.
 
 The illuminated meter measures **output correlation**, from −1 (opposite polarity)
@@ -25,8 +26,8 @@ can indicate mono cancellation; the meter is not a width control or a mono guara
 ## Original DSP
 
 `third_party/airwindows/WiderProc.cpp` is untouched and compiled directly by a thin
-host adapter. No gain compensation, smoothing, clipping or other audio processing
-has been added. Width/Center map from the original normalized parameters to the
+host adapter. The optional learned level match and short A/B fades run after this engine;
+its DSP is unchanged. Width/Center map from the original normalized parameters to the
 original displayed −1…+1 range. Parameters are sampled once per audio block.
 Original random startup dither seeding is retained. Tests alone set identical
 seeds in both implementations to enable exact comparisons.
@@ -98,6 +99,26 @@ reference projects. JUCE is separately AGPLv3/commercial licensed. See
 
 ## Verified in this cloud instance
 
-Linux VST3 compilation and all three CTest suites passed, including 216 bit-exact
-upstream comparisons and native editor/state/control checks. The preview above is
+Linux VST3 compilation and all four CTest suites passed, including 216 bit-exact
+upstream comparisons and native editor/state/control checks and independent libebur128 loudness comparisons. The preview above is
 rendered from the actual editor. No macOS binary or DAW playback has been tested.
+
+## LUFS level matching
+
+Play a representative section and click **Learn Match**. Learning measures stereo
+BS.1770 K-weighted input and processed output before compensation, with absolute
+and relative gating. It pauses on silence and finishes after 15 seconds of accepted
+audio; **Finish Learning** accepts at least 3 seconds. The resulting gain remains
+fixed until you learn again or use **Reset Match**. Changing Width, Center or Mix
+may require learning again.
+
+**Match ON/OFF** preserves the learned gain. **A: Original / B: Processed** compares
+the untouched input against processed audio with short switching fades. The display
+shows signed compensation and measured LUFS. Gain is capped at ±24 dB; this is not
+a limiter and does not guarantee peak headroom. Neutral full-wet Wider learns about
+−3.5 dB to compensate its original 1.5× gain.
+
+Learned gain and Match/A/B switches are recalled with sessions. Older sessions
+load without a learned adjustment. Matching uses bounded storage and does not
+allocate during audio processing. The correlation meter observes the final output.
+The implementation follows codex-tryout at `c60fa1b798b02b158287f14783efa18aaa85b721`.

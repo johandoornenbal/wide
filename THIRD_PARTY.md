@@ -16,3 +16,12 @@
   commercial terms. This project's MIT license does not relicense JUCE.
 - `tests/shim/audioeffectx.h` is a minimal test-only interface from ToTape Studio;
   it contains no Steinberg SDK source and is not part of the shipped plugin.
+
+Level matching is an independent post-engine stage. Its stereo BS.1770
+K-weighting filter design follows libebur128 by Jan Kokemueller (MIT), pinned at
+`67b33abe1558160ed76ada1322329b0e9e058b02` from
+https://github.com/jiixyj/libebur128. The upstream C implementation and license
+are retained in `third_party/libebur128` as an independent test oracle; they are
+not linked into the plugin. Queue compatibility code retains its embedded BSD
+license notices. `Source/LoudnessMatch.h` uses bounded 400 ms windows, 100 ms hops,
+a -70 LUFS absolute gate and -10 LU relative gate for learning.
