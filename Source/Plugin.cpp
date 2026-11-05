@@ -121,6 +121,7 @@ public:
     juce::AudioProcessorEditor* createEditor() override;
     void getStateInformation(juce::MemoryBlock& dst) override {
         auto saved=state.copyState();
+        saved.setProperty("uiSize",uiSize.load(),nullptr);
         saved.setProperty("matchDb",matchDb.load(),nullptr);
         saved.setProperty("hasMatch",hasMatch.load(),nullptr);
         saved.setProperty("learnedInput",learnedInput.load(),nullptr);
@@ -130,6 +131,7 @@ public:
     void setStateInformation(const void* data,int size) override {
         if(auto xml=getXmlFromBinary(data,size); xml && xml->hasTagName(state.state.getType())) {
             auto restored=juce::ValueTree::fromXml(*xml);
+            uiSize=juce::jlimit(1,3,static_cast<int>(restored.getProperty("uiSize",2)));
             const auto db=static_cast<float>(restored.getProperty("matchDb",0.f));
             matchDb=std::isfinite(db)?juce::jlimit(-24.f,24.f,db):0.f;
             hasMatch=std::isfinite(db)&&static_cast<bool>(restored.getProperty("hasMatch",false));
@@ -154,6 +156,7 @@ public:
     std::atomic<bool> hasMatch{false},learning{false};
     std::atomic<int> command{0},learnResult{0};
     std::atomic<uint32_t> matchRevision{0};
+    std::atomic<int> uiSize{2};
 private:
     void timerCallback() override {
         // Mark custom learned state dirty on the message thread, even if the
@@ -244,9 +247,9 @@ private:
     float value=0;
 };
 
-class WiderEditor final : public juce::AudioProcessorEditor, private juce::Timer {
+class WiderPanel final : public juce::Component, private juce::Timer {
 public:
-    explicit WiderEditor(WiderProcessor& p) : AudioProcessorEditor(p), processor(p) {
+    explicit WiderPanel(WiderProcessor& p) : processor(p) {
         setLookAndFeel(&look);
         const char* ids[]={"width","center","mix"};
         const char* names[]={"Width","Center","Dry / Wet"};
@@ -294,10 +297,25 @@ public:
         enableButton.setTooltip("Enable or disable the learned gain without losing it.");
         abButton.setTooltip("Compare the original input with the processed output. Short fades prevent switching clicks.");
         refreshMatch();
+        addAndMakeVisible(sizeChoice);
+        sizeChoice.setComponentID("uiSize");
+        sizeChoice.setName("Interface size");
+        sizeChoice.setTooltip("Interface size: Small 75%, Medium 100%, or Large 125%.");
+        sizeChoice.addItem("Small (75%)",1);
+        sizeChoice.addItem("Medium (100%)",2);
+        sizeChoice.addItem("Large (125%)",3);
+        sizeChoice.setSelectedId(processor.uiSize.load(),juce::dontSendNotification);
+        sizeChoice.onChange=[this] {
+            processor.uiSize=sizeChoice.getSelectedId();
+            processor.updateHostDisplay(juce::AudioProcessor::ChangeDetails{}.withNonParameterStateChanged(true));
+            if(sizeChanged) sizeChanged();
+        };
         setSize(840,810); startTimerHz(30);
     }
-    ~WiderEditor() override { stopTimer(); setLookAndFeel(nullptr); }
+    ~WiderPanel() override { stopTimer(); setLookAndFeel(nullptr); }
+    std::function<void()> sizeChanged;
     void resized() override {
+        sizeChoice.setBounds(630,16,174,26);
         meter.setBounds(190,138,460,246);
         knobs[0].setBounds(68,437,220,160);
         knobs[1].setBounds(310,437,220,160);
@@ -359,10 +377,15 @@ private:
         } else text="Play a representative section, then Learn Match.";
         matchStatus.setText(text,juce::dontSendNotification);
     }
+    juce::ComboBox sizeChoice;
     juce::TextButton learnButton{"Learn Match"},resetButton{"Reset Match"},enableButton{"Match ON"},abButton{"B: Processed"};
     juce::Label readout,matchStatus;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> enableAttachment,abAttachment;
     void timerCallback() override {
+        if(sizeChoice.getSelectedId()!=processor.uiSize.load()) {
+            sizeChoice.setSelectedId(processor.uiSize.load(),juce::dontSendNotification);
+            if(sizeChanged) sizeChanged();
+        }
         refreshMatch();
         auto seq=processor.meterSequence.load();
         idle=seq==lastSequence?juce::jmin(idle+1,16):0; lastSequence=seq;
@@ -379,6 +402,26 @@ private:
     uint32_t lastSequence=0;
     int idle=0;
     float shown=0;
+};
+// Scale a fixed logical panel so painting, controls, and hit testing share one transform.
+// The editor itself retains JUCE's independent host/HiDPI scale handling.
+class WiderEditor final : public juce::AudioProcessorEditor {
+public:
+    explicit WiderEditor(WiderProcessor& p) : AudioProcessorEditor(p), processor(p), panel(p) {
+        addAndMakeVisible(panel);
+        setResizable(false,false);
+        panel.sizeChanged=[this] { applySize(); };
+        applySize();
+    }
+private:
+    void applySize() {
+        const float scale=processor.uiSize.load()==1?.75f:processor.uiSize.load()==3?1.25f:1.f;
+        panel.setTransform(juce::AffineTransform::scale(scale));
+        panel.setBounds(0,0,840,810);
+        setSize(juce::roundToInt(840*scale),juce::roundToInt(810*scale));
+    }
+    WiderProcessor& processor;
+    WiderPanel panel;
 };
 juce::AudioProcessorEditor* WiderProcessor::createEditor() { return new WiderEditor(*this); }
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new WiderProcessor; }

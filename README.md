@@ -23,6 +23,11 @@ to +1 (correlated). It observes a 300 ms exponential window, with display smooth
 it returns to zero on silence, bypass or stopped callbacks. Negative correlation
 can indicate mono cancellation; the meter is not a width control or a mono guarantee.
 
+Choose **Small (75%)**, **Medium (100%)**, or **Large (125%)** from the size menu
+at the top right. The complete interface scales proportionally; Medium retains the
+original size. The selection is saved per plugin instance with the session and
+survives closing and reopening the editor. Older sessions open at Medium.
+
 ## Original DSP
 
 `third_party/airwindows/WiderProc.cpp` is untouched and compiled directly by a thin
