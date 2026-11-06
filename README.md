@@ -43,33 +43,54 @@ The delay is part of the stereo effect; no fixed whole-signal latency is added o
 reported. Mix at zero retains upstream dither/denormal behavior. This is not a limiter.
 This plugin has its own identity and does not replace original Airwindows instances.
 
-## Build on Apple Silicon
+## Build, sign, and install on your Mac
 
-Install Xcode Command Line Tools and CMake 3.22+, then run:
-
-```sh
-cmake -S . -B build-mac -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-cmake --build build-mac --config Release --parallel 3
-ctest --test-dir build-mac -C Release --output-on-failure
-```
-
-CMake downloads pinned JUCE 8.0.12. Alternatively pass
-`-DJUCE_PATH=/absolute/path/to/JUCE`.
-Output: `build-mac/WiderStudio_artefacts/Release/VST3/Wider Studio.vst3`.
+Install Xcode Command Line Tools (`xcode-select --install`) and CMake 3.22+
+(`brew install cmake`), close your DAW, then run from the repository:
 
 ```sh
-codesign --force --deep --sign - "build-mac/WiderStudio_artefacts/Release/VST3/Wider Studio.vst3"
-mkdir -p "$HOME/Library/Audio/Plug-Ins/VST3"
-ditto "build-mac/WiderStudio_artefacts/Release/VST3/Wider Studio.vst3" \
-  "$HOME/Library/Audio/Plug-Ins/VST3/Wider Studio.vst3"
+bash scripts/build-sign-install-mac.sh
 ```
 
-Rescan in your VST3 DAW. Logic requires AU and cannot load this VST3 target.
-The GitHub workflow builds, tests, ad-hoc signs and archives the arm64 VST3.
-Native macOS compilation, signing and DAW playback require macOS and have not
-been run in this Linux environment. Distribution needs appropriate signing and
-notarization.
+This one command builds and tests the Apple Silicon VST3, ad-hoc signs a staged
+copy, verifies its signature, and installs it to:
+
+`~/Library/Audio/Plug-Ins/VST3/Wider Studio.vst3`
+
+An existing installation is replaced only after the new copy passes signing and
+verification. If replacement fails, the script attempts to restore the previous
+installation. The source bundle is left unchanged. Restart or rescan plugins in
+your VST3 DAW afterwards.
+
+To sign and install an already downloaded/extracted bundle without compiling:
+
+```sh
+bash scripts/build-sign-install-mac.sh --install-only "/path/to/Wider Studio.vst3"
+```
+
+The script targets arm64 (including M2 and later) and macOS 11+, uses no `sudo`,
+and follows the workflow from [GuitarSim](https://github.com/johandoornenbal/guitarsim).
+Run it in a native Apple Silicon terminal with Rosetta disabled. The bundle is
+ad-hoc signed, not notarized. Logic Pro requires an Audio Unit and cannot load
+this VST3 target.
+
+Optional `WIDER_BUILD_DIR` and `WIDER_INSTALL_DIR` environment variables
+override the build and installation folders. Extra CMake configure arguments are
+passed through, for example:
+
+```sh
+bash scripts/build-sign-install-mac.sh -DJUCE_PATH=/absolute/path/to/JUCE
+```
+
+The first configure downloads pinned JUCE 8.0.12 unless an existing checkout is
+provided. The default build output is:
+
+`build-mac/WiderStudio_artefacts/Release/VST3/Wider Studio.vst3`
+
+For command-line options, run `bash scripts/build-sign-install-mac.sh --help`.
+GitHub Actions also builds, tests, ad-hoc signs, and archives the arm64 VST3.
+Actual macOS compilation, signing, and DAW playback require verification on a Mac;
+Linux script checks do not establish that those steps work.
 
 ## Linux cloud development
 
